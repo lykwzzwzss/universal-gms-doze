@@ -1,4 +1,13 @@
 ## Change Log:
+- 1.9.3
+Android 16 & Android 17 support
+Verified compatibility with the refactored DeviceIdleController (JobScheduler APEX) and its dumpsys deviceidle whitelist interface
+Improved XML matching for both single- and double-quoted package attributes
+Extended conflicting-module cleanup to allow-in-power-save-except-idle
+Fixed GMS removal not taking effect on Android 14+ by using the correct "dumpsys deviceidle sys-whitelist" command (the plain "whitelist" command only affects the user whitelist, so GMS stayed in the system power-save whitelist)
+Removed a stray syntax error in the uninstall script
+Fixed install-time merge when /product and /system/product point to the same files
+
 - 1.9.2   
 Android 15 support   
 Improved root implementations (Support Magisk / KernelSU / APatch)   

@@ -27,8 +27,12 @@ pm disable --user $U "$GMS/$GMS.$C" &> $NLL
 done
 done
 
-# Add GMS to battery optimization
+# Remove GMS from the power-save whitelists.
+# Android 14+ splits this into a user whitelist and a system whitelist;
+# the plain "whitelist" command only affects the user whitelist, so GMS
+# (a system app) also needs to be removed with "sys-whitelist".
 dumpsys deviceidle whitelist -com.google.android.gms &> $NLL
+dumpsys deviceidle sys-whitelist -com.google.android.gms &> $NLL
 
 exit 0
 )

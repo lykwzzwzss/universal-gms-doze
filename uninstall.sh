@@ -19,11 +19,11 @@ pm enable --user $U "$GMS/$GMS.$C" &> $NLL
 done
 done
 
-# Remove GMS from battery optimization
+# Restore GMS to the power-save whitelists (user and system)
 dumpsys deviceidle whitelist +com.google.android.gms &> $NLL
+dumpsys deviceidle sys-whitelist +com.google.android.gms &> $NLL
 
 exit 0
-)
 
 # Remove all module files after un-installation
 rm -rf /data/adb/universal-gms-doze

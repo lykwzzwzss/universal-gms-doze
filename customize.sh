@@ -33,9 +33,10 @@ abort "- Unsupported API version: $API"
 # Patch the XML and place the modified one to the original directory
 ui_print "- Patching XML files"
 {
-GMS0="\"com.google.android.gms"\"
-STR1="allow-in-power-save package=$GMS0"
-STR2="allow-in-data-usage-save package=$GMS0"
+GMS0="com.google.android.gms"
+QUOTE="[\"']"
+STR1="allow-in-power-save package=$QUOTE$GMS0$QUOTE"
+STR2="allow-in-data-usage-save package=$QUOTE$GMS0$QUOTE"
 NULL="/dev/null"
 }
 ui_print "- Searching default XML files"
@@ -62,7 +63,8 @@ for P in product vendor; do
 if [ -d $MODPATH/$P ]; then
 ui_print "- Moving files to module directory"
 mkdir -p $MODPATH/system/$P
-mv -f $MODPATH/$P $MODPATH/system/
+cp -af $MODPATH/$P/. $MODPATH/system/$P/ 2> $NULL
+rm -rf $MODPATH/$P
 fi
 done
 }

@@ -1,11 +1,15 @@
 # Universal GMS Doze
 
+> Community-maintained fork of [gloeyisk/universal-gms-doze](https://github.com/gloeyisk/universal-gms-doze),
+> updated for Android 16 & Android 17. All credit for the original module goes to the upstream author.
+
 ## Overview
 - Patches Google Play services app and certain processes/services to be able to use battery optimization
-- Support API 23 or later
+- Support API 23 or later (Android 6.0 - Android 17)
 - Support Magisk, KernelSU, and APatch root implementations
 
 ## Download Links (Archive)
+- Latest stable release: 1.9.3 (Android 16 & 17 support) on [GitHub Releases](https://github.com/lykwzzwzss/universal-gms-doze/releases)
 - [GitHub Releases](https://kutt.it/3FfNzX)
 - [Mediafire](https://app.mediafire.com/16j39nr5uxi4l)
 - [MEGA](https://kutt.it/bE35Ld)
@@ -23,6 +27,12 @@ There's a line written `Whitelist (except idle) system apps:` and if `com.google
 > su
 > dumpsys deviceidle
 ```
+- Command-line for check optimization on Android 14+:
+```
+> su
+> dumpsys deviceidle sys-whitelist
+```
+If `com.google.android.gms` is not listed, Google Play services is optimized.
 - Command-line for fix delayed incoming messages issue:   
 If the issue still persist, move the app to Not Optimized battery usage.
 ```
