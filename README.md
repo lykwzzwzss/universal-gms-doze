@@ -1,56 +1,59 @@
-# Universal GMS Doze
+# 通用 GMS Doze
 
-> Community-maintained fork of [gloeyisk/universal-gms-doze](https://github.com/gloeyisk/universal-gms-doze),
-> updated for Android 16 & Android 17. All credit for the original module goes to the upstream author.
+这是 [gloeyisk/universal-gms-doze](https://github.com/gloeyisk/universal-gms-doze) 的社区维护分支。
 
-## Overview
-- Patches Google Play services app and certain processes/services to be able to use battery optimization
-- Support API 23 or later (Android 6.0 - Android 17)
-- Support Magisk, KernelSU, and APatch root implementations
+## 功能
 
-## Download Links (Archive)
-- Latest stable release: 1.9.3 (Android 16 & 17 support) on [GitHub Releases](https://github.com/lykwzzwzss/universal-gms-doze/releases)
-- [GitHub Releases](https://kutt.it/3FfNzX)
-- [Mediafire](https://app.mediafire.com/16j39nr5uxi4l)
-- [MEGA](https://kutt.it/bE35Ld)
-- [SourceForge](https://kutt.it/69oMi9)
+- 从 Android 的系统电池优化白名单中移除 Google Play 服务。
+- 支持 Android 6.0 至 Android 17（API 23-37）。
+- 支持 Magisk、KernelSU 和 APatch。
+- 不会自动清除应用数据，也不会修改其他模块的文件。
+- GMS 数据清理改为安装后的可选操作。
 
-## Troubleshootings
-- Command-line for check optimization (with module installed):
-```
-> su
-> gmsc
-```
-- Command-line for check optimization (in general):   
-There's a line written `Whitelist (except idle) system apps:` and if `com.google.android.gms` line does not exist it means Google Play services is optimized).
-```
-> su
-> dumpsys deviceidle
-```
-- Command-line for check optimization on Android 14+:
-```
-> su
-> dumpsys deviceidle sys-whitelist
-```
-If `com.google.android.gms` is not listed, Google Play services is optimized.
-- Command-line for fix delayed incoming messages issue:   
-If the issue still persist, move the app to Not Optimized battery usage.
-```
-> su
-> cd /data/data
-> find . -type f -name '*gms*' -delete
-```
-- Command-line for disable Find My Device (optional):
-```
-> su
-> pm disable com.google.android.gms/com.google.android.gms.mdm.receivers.MdmDeviceAdminReceiver
+移除白名单可能导致普通优先级推送、后台同步、定位、Wear OS 连接或其他依赖 GMS 的功能延迟。请先在自己的设备上测试。
+
+## 安装
+
+请从 Magisk 或 KernelSU 应用安装，不支持从 Recovery 直接安装。
+
+## 检查状态
+
+安装并重启后，以 Root 身份执行：
+
+```sh
+su
+gmsc
 ```
 
-## Credits
-- topjohnwu / Magisk - Magisk Module Template
-- JumbomanXDA, MrCarb0n / Script fixer and helper
+也可以查看完整列表：
 
-## Extras
-- Donations: [PayPal](https://paypal.me/gloeyisk) - [LiberaPay](https://liberapay.com/gloeyisk) - [Ko-fi](https://ko-fi.com/gloeyisk)
-- Source Code: [GitHub](https://github.com/gloeyisk/universal-gms-doze)
-- Support Thread: [XDA Developers](https://forum.xda-developers.com/apps/magisk/module-universal-gms-doze-t3853710)
+```sh
+su
+dumpsys deviceidle whitelist
+dumpsys deviceidle sys-whitelist
+```
+
+如果 `com.google.android.gms` 出现在任意相关列表中，说明它仍然豁免了部分电池优化。
+
+## 可选：清除 GMS 数据
+
+安装时不会清除 GMS 数据。只有在确实遇到推送或同步异常时，才建议主动执行：
+
+- 在 Magisk/KernelSU 的模块操作按钮中执行 `action.sh`；或
+- 以 Root 身份手动运行模块目录中的 `action.sh`。
+
+清除数据可能导致 Google 账号重新登录、推送令牌重建，并删除本地状态。不要使用按文件名删除 `/data/data` 文件的方式清理。
+
+## 注意事项
+
+- 本模块不会自动禁用“查找我的设备”或设备管理组件。
+- 卸载时只恢复模块安装前原本存在的 GMS 白名单项目。
+- 如果 GMS 原本就不在系统白名单中，安装本模块通常不会带来明显收益。
+
+## 下载
+
+- [GitHub Releases](https://github.com/lykwzzwzss/universal-gms-doze/releases)
+
+## 许可证
+
+GPL-2.0，详见 [LICENSE](LICENSE)。

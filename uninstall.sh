@@ -1,29 +1,22 @@
 #!/system/bin/sh
 
-#
-# Universal GMS Doze by the
-# open-source loving GL-DP and all contributors;
-# Patches Google Play services app and certain processes/services to be able to use battery optimization
-#
-
-# GMS components
 GMS="com.google.android.gms"
-GC1="auth.managed.admin.DeviceAdminReceiver"
-GC2="mdm.receivers.MdmDeviceAdminReceiver"
-NLL="/dev/null"
+STATE_FILE="/data/adb/universal-gms-doze/whitelist.state"
+NULL="/dev/null"
 
-# Enable collective device administrators
-for U in $(ls /data/user); do
-for C in $GC1 $GC2 $GC3; do
-pm enable --user $U "$GMS/$GMS.$C" &> $NLL
-done
-done
+# 只恢复模块安装前就存在的白名单项目。
+if [ -f "$STATE_FILE" ]; then
+  . "$STATE_FILE"
 
-# Restore GMS to the power-save whitelists (user and system)
-dumpsys deviceidle whitelist +com.google.android.gms &> $NLL
-dumpsys deviceidle sys-whitelist +com.google.android.gms &> $NLL
+  if [ "$user_whitelist" = "1" ]; then
+    dumpsys deviceidle whitelist +$GMS &>"$NULL"
+  fi
+  if [ "$sys_whitelist" = "1" ]; then
+    dumpsys deviceidle sys-whitelist +$GMS &>"$NULL"
+  fi
+
+  rm -f "$STATE_FILE"
+  rmdir /data/adb/universal-gms-doze 2>"$NULL"
+fi
 
 exit 0
-
-# Remove all module files after un-installation
-rm -rf /data/adb/universal-gms-doze
