@@ -1,88 +1,61 @@
-#!/data/adb/magisk/busybox sh
-set -o standalone
+#!/system/bin/sh
 
-set -x
-
-#
-# 通用 GMS Doze
-# 修改 Google Play 服务的系统配置，使其可以使用 Android 电池优化。
-#
-
-ui_print "- 检查 Root 实现"
-if [ "$BOOTMODE" ] && [ "$KSU" ]; then
-  ui_print "- 从 KernelSU 应用安装"
-  ui_print "   KernelSU 版本：$KSU_KERNEL_VER_CODE（内核）+ $KSU_VER_CODE（ksud）"
-  if [ "$(which magisk)" ]; then
-    ui_print "   不支持同时运行多个 Root 实现"
-    abort "   安装已中止"
-  fi
-elif [ "$BOOTMODE" ] && [ "$MAGISK_VER_CODE" ]; then
-  ui_print "- 从 Magisk 应用安装"
+[ "$BOOTMODE" = true ] || abort "- 请在 Magisk、KernelSU 或 APatch 管理器中安装"
+if [ "$APATCH" = true ]; then
+  ui_print "- 从 APatch 安装"
+elif [ "$KSU" = true ]; then
+  ui_print "- 从 KernelSU 安装"
+elif [ -n "$MAGISK_VER_CODE" ]; then
+  ui_print "- 从 Magisk 安装"
 else
-  ui_print "   不支持从 Recovery 安装"
-  ui_print "   请从 Magisk 或 KernelSU 应用安装"
-  abort "   安装已中止"
+  abort "- 无法识别 Root 实现"
 fi
+[ "${API:-0}" -ge 23 ] || abort "- 需要 Android 6.0 或更高版本"
+. "$MODPATH/common.sh"
+ui_print "- 保存修改生效前的白名单状态"
+gms_snapshot || abort "- 无法可靠读取或保存白名单；安装已中止"
 
-[ "$API" -ge 23 ] || abort "- 不支持的 Android API 版本：$API"
-
-# 从系统电池优化 XML 中移除 GMS。
-# 不修改其他模块拥有的 XML 文件。
-ui_print "- 修改系统 XML 文件"
-{
-  GMS0="com.google.android.gms"
-  QUOTE="[\"']"
-  STR1="allow-in-power-save package=$QUOTE$GMS0$QUOTE"
-  STR2="allow-in-data-usage-save package=$QUOTE$GMS0$QUOTE"
-  STR3="allow-in-power-save-except-idle package=$QUOTE$GMS0$QUOTE"
-  NULL="/dev/null"
-}
-
-SYS_XML="$(
-  find /system_ext/* /system/* /product/* /vendor/* /india/* /my_bigball/* \
-    -type f -iname '*.xml' -print 2>"$NULL" |
-  while IFS= read -r S; do
-    if grep -qE "$STR1|$STR2|$STR3" "$ROOT$S" 2>"$NULL"; then
-      echo "$S"
+# 直接生成标准挂载目录，分区移动和兼容链接交给管理器。
+[ ! -L "$MODPATH/system" ] || abort "- 模块 system 目录不能是符号链接"
+mkdir -p "$MODPATH/system" || abort "- 无法创建模块目录"
+XML_WORK="$TMPDIR/gmsdoze-xml"
+mkdir -p "$XML_WORK" || abort "- 无法创建 XML 临时目录"
+for PARTITION in system product vendor system_ext odm; do
+  if [ "$PARTITION" = system ]; then
+    SOURCE_BASE=/system
+    TARGET_BASE="$MODPATH/system"
+  else
+    SOURCE_BASE="/$PARTITION"
+    [ -d "$SOURCE_BASE/etc" ] || SOURCE_BASE="/system/$PARTITION"
+    TARGET_BASE="$MODPATH/system/$PARTITION"
+    if [ -L "$TARGET_BASE" ]; then
+      rm -f "$TARGET_BASE" || abort "- 无法修复模块分区链接"
     fi
-  done
-)"
-
-for S in $SYS_XML; do
-  mkdir -p "$(dirname "$MODPATH$S")"
-  cp -af "$ROOT$S" "$MODPATH$S"
-  ui_print "  修改：$S"
-  sed -i "/$STR1/d;/$STR2/d;/$STR3/d" "$MODPATH$S"
-done
-
-# 在需要时将 product/vendor 覆盖文件合并到 /system 下。
-for P in product vendor; do
-  if [ -d "$MODPATH/$P" ]; then
-    ui_print "- 合并模块目录"
-    mkdir -p "$MODPATH/system/$P"
-    cp -af "$MODPATH/$P/." "$MODPATH/system/$P/" 2>"$NULL"
-    rm -rf "$MODPATH/$P"
   fi
+  for CONFIG_DIR in "$SOURCE_BASE/etc/sysconfig" "$SOURCE_BASE/etc/permissions"; do
+    [ -d "$CONFIG_DIR" ] || continue
+    find -L "$CONFIG_DIR" -type f -name '*.xml' 2>/dev/null |
+    while IFS= read -r SOURCE_XML; do
+      grep -qF "$GMS" "$SOURCE_XML" || continue
+      if ! awk -f "$MODPATH/xml-patch.awk" "$SOURCE_XML" > "$XML_WORK/patched.xml"; then
+        ui_print "  跳过无法安全处理的 XML：$SOURCE_XML"
+        continue
+      fi
+      cmp -s "$SOURCE_XML" "$XML_WORK/patched.xml" && continue
+      TARGET_XML="$TARGET_BASE${SOURCE_XML#"$SOURCE_BASE"}"
+      mkdir -p "${TARGET_XML%/*}" || exit 1
+      cp -f "$XML_WORK/patched.xml" "$TARGET_XML" || exit 1
+      ui_print "  已修改：$SOURCE_XML"
+    done || abort "- 写入 XML 覆盖失败"
+  done
 done
-
-ADDON() {
-  ui_print "- 安装状态检查工具"
-  mkdir -p "$MODPATH/system/bin"
-  mv -f "$MODPATH/gmsc" "$MODPATH/system/bin/gmsc"
-}
-
-FINALIZE() {
-  ui_print "- 完成安装"
-  find "$MODPATH"/* -maxdepth 0 \
-    ! -name 'module.prop' \
-    ! -name 'post-fs-data.sh' \
-    ! -name 'service.sh' \
-    ! -name 'action.sh' \
-    ! -name 'system' \
-    -exec rm -rf {} \;
-
-  set_perm_recursive "$MODPATH" 0 0 0755 0755
-  set_perm "$MODPATH/system/bin/gmsc" 0 2000 0755
-}
-
-ADDON && FINALIZE
+mkdir -p "$MODPATH/system/bin" || abort "- 无法创建工具目录"
+mv -f "$MODPATH/gmsc" "$MODPATH/system/bin/gmsc" || abort "- 无法安装检测工具"
+# 不按保留名单删除文件，避免丢失卸载脚本和分区目录。
+set_perm_recursive "$MODPATH" 0 0 0755 0644
+for SCRIPT in service.sh post-fs-data.sh uninstall.sh action.sh restore.sh; do
+  set_perm "$MODPATH/$SCRIPT" 0 0 0755
+done
+set_perm "$MODPATH/system/bin/gmsc" 0 2000 0755
+ui_print "- 安装完成，请重启后运行 gmsc 检查"
+ui_print "- 默认保留 GMS 数据；模块操作按钮提供音量键确认清理"

@@ -1,5 +1,4 @@
-#!/data/adb/magisk/busybox sh
-set -o standalone
+#!/system/bin/sh
 
-# 系统 XML 已在安装阶段修改。本脚本故意不修改其他模块的文件。
+# XML 仅在安装时处理，不修改其他模块文件。
 exit 0

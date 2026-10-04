@@ -1,7 +1,7 @@
 id=universal-gms-doze
-name=通用 GMS Doze
-version=1.9.4
-versionCode=194
+name=Universal GMS Doze
+version=1.9.5
+versionCode=195
 author=lykwzzwzss
-description=让 Google Play 服务使用电池优化；支持 Android 6.0-17（API 23-37）以及 Magisk、KernelSU 和 APatch
+description=移除 Google Play 服务的长期 Doze 豁免，分项检测省电状态，清理数据需音量键确认；支持 Magisk、KernelSU 和 APatch
 updateJson=https://raw.githubusercontent.com/lykwzzwzss/universal-gms-doze/master/module.json

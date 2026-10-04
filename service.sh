@@ -1,45 +1,39 @@
-#!/data/adb/magisk/busybox sh
-set -o standalone
+#!/system/bin/sh
 
-GMS="com.google.android.gms"
-STATE_DIR="/data/adb/universal-gms-doze"
-STATE_FILE="$STATE_DIR/whitelist.state"
-NULL="/dev/null"
-
-contains_gms() {
-  grep -qE "(^|[,[:space:]])$GMS([,[:space:]]|$)"
-}
-
-snapshot_state() {
-  [ -f "$STATE_FILE" ] && return 0
-
-  mkdir -p "$STATE_DIR"
-  USER_WL=0
-  SYS_WL=0
-
-  if dumpsys deviceidle whitelist 2>"$NULL" | contains_gms; then
-    USER_WL=1
-  fi
-  if dumpsys deviceidle sys-whitelist 2>"$NULL" | contains_gms; then
-    SYS_WL=1
-  fi
-
-  umask 077
-  {
-    echo "user_whitelist=$USER_WL"
-    echo "sys_whitelist=$SYS_WL"
-  } > "$STATE_FILE"
-  chmod 600 "$STATE_FILE"
-}
-
-# 等待 Android 完成启动并挂载外部存储。
-until [ "$(resetprop sys.boot_completed)" = "1" ] && [ -d /sdcard ]; do
-  sleep 10
+MODDIR=${0%/*}
+. "$MODDIR/common.sh"
+# 有界等待，不依赖 /sdcard，不强制改变休眠状态。
+TRIES=0
+until [ "$(getprop sys.boot_completed)" = 1 ]; do
+  TRIES=$((TRIES + 1))
+  [ "$TRIES" -lt 120 ] || exit 1
+  sleep 5
 done
-
-# 只保存一次模块安装前的状态，然后从两个白名单中移除 GMS。
-snapshot_state
-dumpsys deviceidle whitelist -$GMS &>"$NULL"
-dumpsys deviceidle sys-whitelist -$GMS &>"$NULL"
-
-exit 0
+gms_load_state || exit 1
+: > "$STATE_DIR/service.log"
+if ! gms_read_lists; then
+  gms_log "无法查询白名单，未修改；请重启后检查。"
+  exit 1
+fi
+if [ "$GMS_USER" = 1 ]; then
+  USER_REMOVED=1
+  gms_save_state || exit 1
+  dumpsys deviceidle whitelist "-$GMS" >> "$STATE_DIR/service.log" 2>&1
+fi
+if [ "$GMS_SYS" = 1 ]; then
+  SYS_REMOVED=1
+  gms_save_state || exit 1
+  dumpsys deviceidle sys-whitelist "-$GMS" >> "$STATE_DIR/service.log" 2>&1
+fi
+if ! gms_read_lists; then
+  gms_log "修改后查询失败，优化状态未知。"
+  exit 1
+fi
+if [ "$GMS_USER" = 1 ] || [ "$GMS_SYS" = 1 ]; then
+  gms_log "完整 Doze 豁免仍存在，当前系统可能不支持移除。"
+  exit 1
+fi
+gms_log "完整 Doze 豁免已移除；其他省电豁免状态：$GMS_EXCEPT（0=无，1=有）。"
+if [ "$GMS_EXCEPT" = 1 ]; then
+  gms_log "其他省电豁免仍存在，请检查 XML 挂载、元模块或同路径模块冲突。"
+fi

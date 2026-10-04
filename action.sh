@@ -1,20 +1,29 @@
 #!/system/bin/sh
 
-# 这是可选的 GMS 数据清理操作，不会在安装或升级时自动执行。
-# 可在 Magisk/KernelSU 的模块操作按钮中执行，也可以手动运行本脚本。
-
-GMS="com.google.android.gms"
-NULL="/dev/null"
-
-echo "准备清除 Google Play 服务数据。此操作可能导致账号重新登录、推送令牌重建。"
-
-for USER_ID in $(ls /data/user 2>"$NULL"); do
-  pm clear --user "$USER_ID" "$GMS" 2>"$NULL"
-  if [ "$?" = "0" ]; then
-    echo "已清除用户 $USER_ID 的 Google Play 服务数据。"
-  else
-    echo "清除用户 $USER_ID 的数据失败或不受支持。"
-  fi
-done
-
-exit 0
+[ "$(id -u)" = 0 ] || { echo "需要 Root 权限。"; exit 1; }
+CURRENT_USER=$(am get-current-user 2>/dev/null)
+case "$CURRENT_USER" in ''|*[!0-9]*) echo "无法确认当前用户，已取消。"; exit 1 ;; esac
+GMS=com.google.android.gms
+echo "可选操作：清除当前用户 $CURRENT_USER 的 Google Play 服务数据。"
+echo "可能需要重新登录，推送令牌和本地状态将重建；不清理其他用户或工作资料。"
+echo "音量上键：确认清理；音量下键：取消。30 秒未选择自动取消。"
+KEY=$(timeout 30 getevent -ql 2>/dev/null | awk '
+  /KEY_VOLUMEUP[ \t]+DOWN/ {print "up"; exit}
+  /KEY_VOLUMEDOWN[ \t]+DOWN/ {print "down"; exit}')
+if [ "$KEY" != up ]; then
+  echo "已取消，未清除任何数据。"
+  exit 0
+fi
+if [ "$(am get-current-user 2>/dev/null)" != "$CURRENT_USER" ]; then
+  echo "当前用户已变化，已取消，未清除数据。"
+  exit 0
+fi
+echo "正在清理当前用户 $CURRENT_USER……"
+RESULT=$(pm clear --user "$CURRENT_USER" "$GMS" 2>&1)
+STATUS=$?
+if [ "$STATUS" = 0 ] && [ "$RESULT" = Success ]; then
+  echo "清理完成。"
+else
+  echo "清理失败：${RESULT:-系统未返回有效结果}"
+  exit 1
+fi

@@ -1,22 +1,11 @@
 #!/system/bin/sh
 
-GMS="com.google.android.gms"
-STATE_FILE="/data/adb/universal-gms-doze/whitelist.state"
-NULL="/dev/null"
-
-# 只恢复模块安装前就存在的白名单项目。
-if [ -f "$STATE_FILE" ]; then
-  . "$STATE_FILE"
-
-  if [ "$user_whitelist" = "1" ]; then
-    dumpsys deviceidle whitelist +$GMS &>"$NULL"
-  fi
-  if [ "$sys_whitelist" = "1" ]; then
-    dumpsys deviceidle sys-whitelist +$GMS &>"$NULL"
-  fi
-
-  rm -f "$STATE_FILE"
-  rmdir /data/adb/universal-gms-doze 2>"$NULL"
-fi
-
-exit 0
+MODDIR=${0%/*}
+. "$MODDIR/common.sh"
+gms_load_state || exit 1
+# 卸载常发生在系统服务启动前，下一次启动完成后再恢复。
+mkdir -p /data/adb/service.d || exit 1
+cp -f "$MODDIR/common.sh" "$STATE_DIR/common.sh" || exit 1
+cp -f "$MODDIR/restore.sh" /data/adb/service.d/universal-gms-doze-restore.sh || exit 1
+chmod 600 "$STATE_DIR/common.sh"
+chmod 755 /data/adb/service.d/universal-gms-doze-restore.sh

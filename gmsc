@@ -1,27 +1,33 @@
 #!/system/bin/sh
 
-ID="$(id -u)"
-GMS="com.google.android.gms"
-NULL="/dev/null"
-
-contains_gms() {
-  grep -qE "(^|[,[:space:]])$GMS([,[:space:]]|$)"
-}
-
-is_whitelisted() {
-  dumpsys deviceidle whitelist 2>"$NULL" | contains_gms && return 0
-  dumpsys deviceidle sys-whitelist 2>"$NULL" | contains_gms && return 0
-  dumpsys deviceidle except-idle-whitelist 2>"$NULL" | contains_gms && return 0
-  return 1
-}
-
-if [ "$ID" != "0" ]; then
-  echo -e "\033[1;33m 需要 Superuser（su）权限！\033[0m"
+[ "$(id -u)" = 0 ] || { echo "需要 Root（su）权限。"; exit 1; }
+TOOL_DIR=${0%/*}
+if [ -f "$TOOL_DIR/common.sh" ]; then
+  . "$TOOL_DIR/common.sh"
+elif [ -f "$TOOL_DIR/../../common.sh" ]; then
+  . "$TOOL_DIR/../../common.sh"
+elif [ -f /data/adb/modules/universal-gms-doze/common.sh ]; then
+  . /data/adb/modules/universal-gms-doze/common.sh
+else
+  echo "检测工具不完整，请重新安装模块。"
   exit 1
 fi
-
-if is_whitelisted; then
-  echo -e "\033[1;31m Google Play 服务未优化。\033[0m"
-else
-  echo -e "\033[1;32m Google Play 服务已优化。\033[0m"
+if ! gms_read_lists; then
+  echo "无法读取系统白名单，优化状态未知。"
+  exit 1
 fi
+if [ "$GMS_USER" = 0 ] && [ "$GMS_SYS" = 0 ]; then
+  echo "Doze 长期豁免：已移除。"
+else
+  echo "Doze 长期豁免：仍存在。"
+fi
+echo "  用户白名单：$GMS_USER；系统白名单：$GMS_SYS（0=无，1=有）"
+case "$GMS_EXCEPT" in
+  0) echo "其他省电豁免（非 Doze）：无。" ;;
+  1) echo "其他省电豁免（非 Doze）：仍存在；不代表 Doze 移除失败。" ;;
+  *) echo "其他省电豁免（非 Doze）：无法确认，系统未提供有效查询结果。" ;;
+esac
+DEEP=$(dumpsys deviceidle get deep 2>/dev/null)
+LIGHT=$(dumpsys deviceidle get light 2>/dev/null)
+echo "当前深度 Doze：${DEEP:-未知}；轻度 Doze：${LIGHT:-未知}。"
+echo "白名单状态不等于已进入休眠，也不代表实测省电幅度。"

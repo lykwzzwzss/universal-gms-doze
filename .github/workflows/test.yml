@@ -1,0 +1,13 @@
+name: 模块回归检查
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 验证 XML、备份恢复和清理确认
+        run: bash tests/run-tests.sh
