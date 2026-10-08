@@ -4,10 +4,6 @@
 TOOL_DIR=${0%/*}
 if [ -f "$TOOL_DIR/common.sh" ]; then
   . "$TOOL_DIR/common.sh"
-elif [ -f "$TOOL_DIR/../../common.sh" ]; then
-  . "$TOOL_DIR/../../common.sh"
-elif [ -f /data/adb/modules/universal-gms-doze/common.sh ]; then
-  . /data/adb/modules/universal-gms-doze/common.sh
 else
   echo "检测工具不完整，请重新安装模块。"
   exit 1
@@ -23,11 +19,14 @@ else
 fi
 echo "  用户白名单：$GMS_USER；系统白名单：$GMS_SYS（0=无，1=有）"
 case "$GMS_EXCEPT" in
-  0) echo "其他省电豁免（非 Doze）：无。" ;;
-  1) echo "其他省电豁免（非 Doze）：仍存在；不代表 Doze 移除失败。" ;;
-  *) echo "其他省电豁免（非 Doze）：无法确认，系统未提供有效查询结果。" ;;
+  0) echo "except-idle 部分豁免：无。" ;;
+  1) echo "except-idle 部分豁免：仍存在；不代表完整 Doze 豁免移除失败。" ;;
+  *) echo "except-idle 部分豁免：无法确认，系统未提供有效查询结果。" ;;
 esac
-DEEP=$(dumpsys deviceidle get deep 2>/dev/null)
-LIGHT=$(dumpsys deviceidle get light 2>/dev/null)
+DEEP=$(gms_deviceidle get deep 2>/dev/null) || DEEP=未知
+LIGHT=$(gms_deviceidle get light 2>/dev/null) || LIGHT=未知
+case "$DEEP" in ACTIVE|INACTIVE|IDLE_PENDING|SENSING|LOCATING|IDLE|IDLE_MAINTENANCE|QUICK_DOZE_DELAY) ;; *) DEEP=未知 ;; esac
+case "$LIGHT" in ACTIVE|INACTIVE|PRE_IDLE|IDLE|WAITING_FOR_NETWORK|IDLE_MAINTENANCE|OVERRIDE) ;; *) LIGHT=未知 ;; esac
 echo "当前深度 Doze：${DEEP:-未知}；轻度 Doze：${LIGHT:-未知}。"
 echo "白名单状态不等于已进入休眠，也不代表实测省电幅度。"
+echo "检测范围为 Android deviceidle，不涵盖 MIUI 策略、流量节省或所有 AppOps。"

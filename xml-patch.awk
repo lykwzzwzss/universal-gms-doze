@@ -72,12 +72,14 @@ END {
                 if(closing!=name) fail()
                 pos+=closing_length
             }
-            continue
+            removed++; continue
         }
         if(!depth && ++roots>1) fail()
         if(!selfclose) stack[++depth]=name
         out=out token
     }
     if(depth || roots!=1) fail()
+    # 3 表示未删除节点，安装器不应仅因文件末尾换行不同生成覆盖。
+    if(mode=="changed" && !removed) exit 3
     if(mode!="check") printf "%s",out
 }

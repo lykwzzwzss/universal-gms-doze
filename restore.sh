@@ -2,24 +2,21 @@
 
 STATE_DIR=${GMS_STATE_DIR:-/data/adb/universal-gms-doze}
 . "$STATE_DIR/common.sh"
-TRIES=0
-until [ "$(getprop sys.boot_completed)" = 1 ] && gms_read_lists; do
-  TRIES=$((TRIES + 1))
-  [ "$TRIES" -lt 120 ] || exit 1
-  sleep 5
-done
 # 重新安装后不要让旧任务添加豁免。
 if [ -f /data/adb/modules/universal-gms-doze/module.prop ] && \
    [ ! -f /data/adb/modules/universal-gms-doze/remove ]; then
   rm -f /data/adb/service.d/universal-gms-doze-restore.sh
   exit 0
 fi
+gms_wait_boot || exit 1
+# 服务异常时留到下次启动重试，不在本次开机反复执行 dumpsys。
+gms_read_lists || exit 1
 gms_load_state || exit 1
 if [ "$BASE_USER" = 1 ] && [ "$USER_REMOVED" = 1 ]; then
-  dumpsys deviceidle whitelist "+$GMS" >/dev/null 2>&1
+  gms_deviceidle whitelist "+$GMS" >/dev/null 2>&1
 fi
 if [ "$BASE_SYS" = 1 ] && [ "$SYS_REMOVED" = 1 ]; then
-  dumpsys deviceidle sys-whitelist "+$GMS" >/dev/null 2>&1
+  gms_deviceidle sys-whitelist "+$GMS" >/dev/null 2>&1
 fi
 gms_read_lists || exit 1
 if [ "$BASE_USER" = 1 ] && [ "$USER_REMOVED" = 1 ] && [ "$GMS_USER" != 1 ]; then exit 1; fi

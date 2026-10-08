@@ -4,13 +4,45 @@ GMS=com.google.android.gms
 STATE_DIR=${GMS_STATE_DIR:-/data/adb/universal-gms-doze}
 STATE_FILE="$STATE_DIR/whitelist.state"
 
+# Android 6 的 dumpsys 没有 -t；统一使用外层超时，并兼容手动执行工具。
+gms_timeout() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 2 "$@"
+    return $?
+  fi
+  for GMS_BUSYBOX in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
+    if [ -x "$GMS_BUSYBOX" ]; then
+      "$GMS_BUSYBOX" timeout -k 2 "$@"
+      return $?
+    fi
+  done
+  echo "缺少 timeout 工具，已取消系统操作。" >&2
+  return 127
+}
+gms_deviceidle() { gms_timeout 15 dumpsys deviceidle "$@"; }
+gms_wait_boot() {
+  GMS_TRIES=0
+  until [ "$(getprop sys.boot_completed)" = 1 ]; do
+    GMS_TRIES=$((GMS_TRIES + 1))
+    [ "$GMS_TRIES" -lt 120 ] || return 1
+    sleep 5
+  done
+}
+
 gms_read_lists() {
-  GMS_LISTS=$(dumpsys deviceidle whitelist 2>/dev/null) || return 1
-  printf '%s\n' "$GMS_LISTS" | grep -qE '^(system-excidle|system|user),[^,]+,[0-9]+$' || return 1
+  GMS_USER=unknown
+  GMS_SYS=unknown
+  GMS_EXCEPT=unknown
+  GMS_LISTS=$(gms_deviceidle whitelist 2>/dev/null) || return 1
+  # 拒绝混有错误提示或超时残片的输出，不能仅凭其中一条合法记录报成功。
+  printf '%s\n' "$GMS_LISTS" | awk '
+    /^[ \t\r]*$/ {next}
+    /^(system-excidle|system|user),[^,]+,[0-9]+$/ {n++; next}
+    {bad=1}
+    END {exit (bad || !n)}' || return 1
   GMS_USER=$(printf '%s\n' "$GMS_LISTS" | awk -F, -v p="$GMS" '$1=="user" && $2==p {found=1} END {print found+0}')
   GMS_SYS=$(printf '%s\n' "$GMS_LISTS" | awk -F, -v p="$GMS" '$1=="system" && $2==p {found=1} END {print found+0}')
-  GMS_EXCEPT=unknown
-  GMS_EXCEPT_RESULT=$(dumpsys deviceidle except-idle-whitelist "=$GMS" 2>/dev/null)
+  GMS_EXCEPT_RESULT=$(gms_deviceidle except-idle-whitelist "=$GMS" 2>/dev/null) || GMS_EXCEPT_RESULT=unknown
   case "$GMS_EXCEPT_RESULT" in
     true|1) GMS_EXCEPT=1 ;;
     false|0) GMS_EXCEPT=0 ;;
@@ -22,7 +54,7 @@ gms_read_lists() {
 }
 
 gms_read_removed() {
-  GMS_DUMP=$(dumpsys deviceidle 2>/dev/null) || return 1
+  GMS_DUMP=$(gms_deviceidle 2>/dev/null) || return 1
   printf '%s\n' "$GMS_DUMP" | grep -q 'Whitelist' || return 1
   GMS_REMOVED=$(printf '%s\n' "$GMS_DUMP" | awk -v p="$GMS" '
     /Removed from whitelist system apps:/ {section=1; next}
@@ -32,7 +64,8 @@ gms_read_removed() {
 }
 gms_state_get() {
   [ -f "$STATE_FILE" ] || return 1
-  awk -F= -v key="$1" '$1==key && NF==2 {print $2; exit}' "$STATE_FILE"
+  awk -F= -v key="$1" '$1==key {n++; value=$2; if(NF!=2) bad=1}
+    END {if(n!=1 || bad) exit 1; print value}' "$STATE_FILE"
 }
 gms_load_state() {
   [ "$(gms_state_get schema)" = 2 ] || return 1
@@ -53,6 +86,7 @@ gms_save_state() {
     mkdir -p "$STATE_DIR" || exit 1
     chmod 700 "$STATE_DIR" || exit 1
     STATE_TMP="$STATE_FILE.tmp.$$"
+    trap 'rm -f "$STATE_TMP"' 0
     {
       printf 'schema=2\nuser_whitelist=%s\nsys_whitelist=%s\nexcept_idle_whitelist=%s\nremoved_system_whitelist=%s\nuser_removed=%s\nsys_removed=%s\nlegacy_user_unknown=%s\n' \
         "$BASE_USER" "$BASE_SYS" "$BASE_EXCEPT" "$BASE_REMOVED" "$USER_REMOVED" "$SYS_REMOVED" "$LEGACY_USER_UNKNOWN"
@@ -61,7 +95,8 @@ gms_save_state() {
 }
 gms_snapshot() {
   gms_load_state && return 0
-  [ "$(gms_state_get schema)" != 2 ] || return 1
+  # 只有不带 schema 的旧版记录可以迁移，损坏/未知版本不得当作旧备份覆盖。
+  if [ -f "$STATE_FILE" ] && grep -q '^schema=' "$STATE_FILE"; then return 1; fi
   gms_read_lists && gms_read_removed || return 1
   BASE_USER=$GMS_USER
   BASE_SYS=$GMS_SYS

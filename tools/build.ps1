@@ -11,15 +11,13 @@ if ($properties -notmatch "(?m)^version=$([regex]::Escape($metadata.version))$" 
 $packagePath = Join-Path $OutputDirectory "gms_$($metadata.version).zip"
 if (Test-Path -LiteralPath $packagePath) { throw "文件已存在：$packagePath，请使用新的输出目录" }
 $packageFiles = @(
-    'module.prop','module.json','customize.sh','common.sh','xml-patch.awk',
-    'service.sh','post-fs-data.sh','uninstall.sh','restore.sh','action.sh','gmsc',
+    'module.prop','module.json','customize.sh','common.sh','xml-patch.awk','xml-install.sh',
+    'service.sh','uninstall.sh','restore.sh','action.sh','gmsc',
     'README.md','changelog.md','LICENSE',
     'META-INF/com/google/android/update-binary','META-INF/com/google/android/updater-script'
 )
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$archive = [System.IO.Compression.ZipFile]::Open($packagePath, [System.IO.Compression.ZipArchiveMode]::Create)
-try {
-    foreach ($relativePath in $packageFiles) {
+$packageSources = foreach ($relativePath in $packageFiles) {
         $sourcePath = Join-Path $projectRoot $relativePath
         $bytes = [System.IO.File]::ReadAllBytes($sourcePath)
         if ($bytes.Length -ge 3 -and $bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191) {
@@ -28,10 +26,21 @@ try {
         if ([System.Text.Encoding]::UTF8.GetString($bytes).Contains([char]13)) {
             throw "文件必须使用 LF 换行：$relativePath"
         }
-        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-            $archive, $sourcePath, $relativePath, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
-    }
-} finally { $archive.Dispose() }
+        [pscustomobject]@{ Source = $sourcePath; Entry = $relativePath }
+}
+$temporaryPath = "$packagePath.build.$([guid]::NewGuid().ToString('N')).tmp"
+try {
+    $archive = [System.IO.Compression.ZipFile]::Open($temporaryPath, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($packageSource in $packageSources) {
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive, $packageSource.Source, $packageSource.Entry, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    } finally { $archive.Dispose() }
+    [System.IO.File]::Move($temporaryPath, $packagePath)
+} finally {
+    if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath }
+}
 Write-Output ("安装包：" + $packagePath)
 Write-Output ("大小：" + (Get-Item -LiteralPath $packagePath).Length + " 字节")
 Write-Output ("SHA-256：" + (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash)
